@@ -207,60 +207,74 @@ async function createGraphPanel(foam: Foam, context: vscode.ExtensionContext) {
 
   panel.webview.onDidReceiveMessage(
     async message => {
-      switch (message.type) {
-        case 'webviewDidLoad': {
-          const styles = getGraphStyle();
-          panel.webview.postMessage({
-            type: 'didUpdateStyle',
-            payload: styles,
-          });
-          panel.webview.postMessage({
-            type: 'didUpdateShowFolders',
-            payload: getShowFolders(),
-          });
-          panel.webview.postMessage({
-            type: 'didUpdateExcludedFolders',
-            payload: getExcludedFolders(),
-          });
-          updateGraph(panel, foam);
-          break;
-        }
-        case 'webviewDidSelectNode': {
-          const payload = message.payload;
-          const id: string = typeof payload === 'string' ? payload : payload?.id;
-          const type: string | undefined =
-            typeof payload === 'object' ? payload?.type : undefined;
-
-          if (!id) {
+      try {
+        switch (message.type) {
+          case 'webviewDidLoad': {
+            const styles = getGraphStyle();
+            panel.webview.postMessage({
+              type: 'didUpdateStyle',
+              payload: styles,
+            });
+            panel.webview.postMessage({
+              type: 'didUpdateShowFolders',
+              payload: getShowFolders(),
+            });
+            panel.webview.postMessage({
+              type: 'didUpdateExcludedFolders',
+              payload: getExcludedFolders(),
+            });
+            updateGraph(panel, foam);
             break;
           }
-
-          const uri = vscode.Uri.parse(id);
-          if (type === 'folder') {
-            // Try to reveal folder in explorer, fallback to opening first file
-            try {
-              await vscode.commands.executeCommand('revealInExplorer', uri);
-            } catch {}
-            try {
-              const entries = await vscode.workspace.fs.readDirectory(uri);
-              const firstFile = entries.find(([name, fileType]) => fileType === vscode.FileType.File);
-              if (firstFile) {
-                const child = vscode.Uri.joinPath(uri, firstFile[0]);
-                await vscode.commands.executeCommand('vscode.open', child, vscode.ViewColumn.One);
+          case 'webviewDidSelectNode': {
+            const payload = message.payload;
+            const id = typeof payload === 'string' ? payload : payload?.id;
+            const type = typeof payload === 'object' ? payload?.type : undefined;
+            if (!id) return;
+            if (type === 'folder') {
+              try {
+                await vscode.commands.executeCommand(
+                  'revealInExplorer',
+                  vscode.Uri.parse(id)
+                );
+              } catch {
+                // fallback: open first file in folder
+                try {
+                  const folderUri = vscode.Uri.parse(id);
+                  const files = await vscode.workspace.findFiles(
+                    new vscode.RelativePattern(folderUri, '**/*.*'),
+                    '**/node_modules/**',
+                    1
+                  );
+                  if (files.length > 0) {
+                    await vscode.commands.executeCommand('vscode.open', files[0]);
+                  }
+                } catch {}
               }
-            } catch {}
-          } else {
-            const selectedNote = foam.workspace.get(fromVsCodeUri(uri));
-            if (isSome(selectedNote)) {
-              vscode.commands.executeCommand('vscode.open', uri, vscode.ViewColumn.One);
+            } else {
+              try {
+                await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(id));
+              } catch (e) {
+                Logger.warn('Could not open resource from graph click', e as any);
+              }
             }
+            break;
           }
-          break;
+          case 'webviewDidChangeLayout': {
+            const layout = message.payload;
+            if (layout === 'force' || layout === 'folderTree') {
+              const config = vscode.workspace.getConfiguration('foam.graph');
+              const style = (config.get('style') as any) ?? {};
+              const next = { ...style, layout };
+              await config.update('style', next, vscode.ConfigurationTarget.Workspace);
+            }
+            break;
+          }
+          default:
+            Logger.info('Unknown message type', message.type);
         }
-        case 'error': {
-          Logger.error('An error occurred in the graph view', message.payload);
-          break;
-        }
+      } catch (e) {
+        Logger.error('Error while processing message from webview', e as any);
       }
     },
     undefined,

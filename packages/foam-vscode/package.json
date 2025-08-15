@@ -650,8 +650,79 @@
         },
         "foam.graph.style": {
           "type": "object",
-          "description": "Custom graph styling settings. An example is present in the documentation.",
-          "default": {}
+          "markdownDescription": "Custom graph styling and layout settings. Any omitted property falls back to sensible defaults or VS Code theme-derived values.",
+          "default": {},
+          "properties": {
+            "background": {
+              "type": "string",
+              "description": "Background color of the graph (CSS color)."
+            },
+            "fontSize": {
+              "type": "number",
+              "description": "Base font size for node labels."
+            },
+            "fontFamily": {
+              "type": "string",
+              "description": "Font family for node labels."
+            },
+            "lineColor": {
+              "type": "string",
+              "description": "Default link color (CSS color)."
+            },
+            "lineWidth": {
+              "type": "number",
+              "description": "Link stroke width."
+            },
+            "particleWidth": {
+              "type": "number",
+              "description": "Width of directional particles on highlighted links."
+            },
+            "highlightedForeground": {
+              "type": "string",
+              "description": "Color for highlighted states (CSS color)."
+            },
+            "node": {
+              "type": "object",
+              "description": "Per-node-type colors.",
+              "properties": {
+                "note": { "type": "string" },
+                "placeholder": { "type": "string" },
+                "tag": { "type": "string" },
+                "folder": { "type": "string" },
+                "image": { "type": "string" },
+                "attachment": { "type": "string" }
+              }
+            },
+            "layout": {
+              "type": "string",
+              "default": "force",
+              "enum": ["force", "folderTree"],
+              "markdownDescription": "Layout algorithm. 'force' uses a force-directed layout. 'folderTree' computes a tree layout for folders and places notes near their parent folder."
+            },
+            "forces": {
+              "type": "object",
+              "markdownDescription": "Tuning parameters for the force-directed layout (applies when layout = 'force').",
+              "properties": {
+                "charge": {
+                  "type": "number",
+                  "markdownDescription": "Many-body force strength (negative values repel, positive attract)."
+                },
+                "link": {
+                  "type": "object",
+                  "properties": {
+                    "distance": {
+                      "type": "number",
+                      "description": "Preferred link distance."
+                    },
+                    "strength": {
+                      "type": "number",
+                      "description": "Link force strength (0..1 typical)."
+                    }
+                  }
+                }
+              }
+            }
+          }
         },
         "foam.graph.showFolders": {
           "type": "boolean",

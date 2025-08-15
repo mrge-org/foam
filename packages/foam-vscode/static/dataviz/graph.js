@@ -8,6 +8,10 @@ const initGUI = () => {
   const folderFilterFolder = gui.addFolder('Folders');
   const folderControllers = new Map(); // key: folder name -> controller
 
+  // Layout controls
+  const layoutFolder = gui.addFolder('Layout');
+  let layoutController = null; // singleton controller for layout mode
+
   return {
     /**
      * Update the DAT controls to reflect the model
@@ -69,6 +73,36 @@ const initGUI = () => {
       }
       if (folderControllers.size === 0 && folderFilterFolder._ul?.style) {
         try { folderFilterFolder.close(); } catch {}
+      }
+
+      // Update layout control (dropdown)
+      const currentLayout = (m.style && m.style.layout) || 'force';
+      if (!layoutController) {
+        const proxy = { layout: currentLayout };
+        layoutController = layoutFolder
+          .add(proxy, 'layout', ['force', 'folderTree'])
+          .name('Mode')
+          .onFinishChange(function (value) {
+            // update model and apply immediately
+            model.style = { ...model.style, layout: value };
+            applyLayoutFromStyle(model);
+            // persist in VS Code settings via extension
+            if (window && typeof acquireVsCodeApi === 'function') {
+              try {
+                const vscode = acquireVsCodeApi();
+                vscode.postMessage({ type: 'webviewDidChangeLayout', payload: value });
+              } catch {}
+            }
+          });
+        try { layoutFolder.open(); } catch {}
+      } else {
+        // keep controller in sync with external changes
+        const ctrlObj = layoutController.object;
+        if (ctrlObj && ctrlObj.layout !== currentLayout) {
+          ctrlObj.layout = currentLayout;
+          // dat.gui doesn't auto-refresh displayed value; recreate display
+          try { layoutController.updateDisplay(); } catch {}
+        }
       }
     },
   };
@@ -244,6 +278,8 @@ const Actions = {
       },
     };
     graph.backgroundColor(model.style.background);
+    applyForcesFromStyle(model);
+    applyLayoutFromStyle(model);
   },
   updateFilters: () => {
     update(m => {
@@ -447,6 +483,117 @@ function updateForceGraphDataFromModel(m) {
   graph.graphData(m.data);
 }
 
+// Apply d3-force settings from style.forces
+function applyForcesFromStyle(model) {
+  const s = model.style || {};
+  const forces = s.forces || {};
+  // Charge / ManyBody
+  if (forces.charge != null) {
+    const strength = Number(forces.charge) || 0;
+    graph.d3Force('charge', d3.forceManyBody().strength(strength));
+  } else {
+    // default mild repulsion
+    graph.d3Force('charge', d3.forceManyBody().strength(-15));
+  }
+  // Link force (optional). If provided, use distance/strength from style
+  const linkCfg = forces.link || {};
+  if (linkCfg && (linkCfg.distance != null || linkCfg.strength != null)) {
+    const lf = d3
+      .forceLink()
+      .id(d => d.id)
+      .distance(linkCfg.distance != null ? Number(linkCfg.distance) : 30)
+      .strength(linkCfg.strength != null ? Number(linkCfg.strength) : 0.1);
+    graph.d3Force('link', lf);
+  } else {
+    // remove custom link force to let default behavior apply
+    graph.d3Force('link', null);
+  }
+}
+
+// Compute and apply a folder tree layout if requested
+function applyLayoutFromStyle(model) {
+  const layout = (model.style && model.style.layout) || 'force';
+  if (layout !== 'folderTree') {
+    // Unpin any previously pinned nodes
+    if (model && model.data && model.data.nodes) {
+      model.data.nodes.forEach(n => {
+        delete n.fx;
+        delete n.fy;
+      });
+    }
+    graph.cooldownTicks(100);
+    return;
+  }
+
+  // Build folder hierarchy roots (nodes with type 'folder')
+  const info = model.graph.nodeInfo || {};
+  const folderNodes = Object.values(info).filter(n => n.type === 'folder');
+  if (folderNodes.length === 0) return;
+
+  // Build a map id -> { id, children: [] }
+  const nodesById = new Map();
+  folderNodes.forEach(n => nodesById.set(n.id, { id: n.id, data: n, children: [] }));
+  let roots = [];
+  nodesById.forEach(node => {
+    const parentId = node.data.parentFolderId;
+    if (parentId && nodesById.has(parentId)) {
+      nodesById.get(parentId).children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+
+  // Create a virtual root if multiple roots exist
+  let root;
+  if (roots.length === 1) {
+    root = d3.hierarchy(roots[0], d => d.children);
+  } else {
+    root = d3.hierarchy({ id: '__virtual_root__', children: roots }, d => d.children);
+  }
+
+  // Layout size based on viewport
+  const width = window.innerWidth || 1000;
+  const height = window.innerHeight || 800;
+  const tree = d3.tree().nodeSize([24, 80]); // dx, dy
+  const layoutRoot = tree(root);
+
+  // Assign positions to folder nodes
+  const posById = new Map();
+  layoutRoot.each(d => {
+    if (d.data && d.data.id && d.data.id !== '__virtual_root__') {
+      // Map tree (x,y) to screen coordinates (swap for readability)
+      const fx = (width / 2) + d.y; // horizontal spread by depth
+      const fy = (height / 2) + d.x; // vertical position by order
+      posById.set(d.data.id, { fx, fy });
+    }
+  });
+
+  // Pin folder nodes to their positions; place notes near their parent folder
+  model.data.nodes.forEach(n => {
+    const meta = info[n.id];
+    if (!meta) return;
+    if (meta.type === 'folder') {
+      const p = posById.get(n.id);
+      if (p) {
+        n.fx = p.fx;
+        n.fy = p.fy;
+      }
+    } else {
+      // Place notes near their parent folder (random small offset)
+      const parentId = meta.parentFolderId;
+      const p = parentId && posById.get(parentId);
+      if (p) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 20 + Math.random() * 25;
+        n.fx = p.fx + Math.cos(angle) * radius;
+        n.fy = p.fy + Math.sin(angle) * radius;
+      }
+    }
+  });
+
+  // Brief cooldown to settle links while keeping positions
+  graph.cooldownTicks(30);
+}
 // Determine visibility by checking this node and walking up its folder ancestry.
 function isNodeVisibleByFolderToggles(node, model) {
   // If no excluded folders are configured, do nothing
@@ -640,6 +787,9 @@ try {
     vscode.postMessage({
       type: 'webviewDidLoad',
     });
+    // Apply initial forces/layout using default style until VS Code sends style
+    applyForcesFromStyle(model);
+    applyLayoutFromStyle(model);
   };
 
   window.addEventListener('error', error => {
