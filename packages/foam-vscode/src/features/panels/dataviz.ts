@@ -12,9 +12,23 @@ export default async function activate(
   vscode.workspace.onDidChangeConfiguration(event => {
     if (event.affectsConfiguration('foam.graph.style')) {
       const style = getGraphStyle();
-      panel.webview.postMessage({
+      panel?.webview?.postMessage({
         type: 'didUpdateStyle',
         payload: style,
+      });
+    }
+    if (event.affectsConfiguration('foam.graph.showFolders')) {
+      const showFolders = getShowFolders();
+      panel?.webview?.postMessage({
+        type: 'didUpdateShowFolders',
+        payload: showFolders,
+      });
+    }
+    if (event.affectsConfiguration('foam.graph.excludedFolders')) {
+      const excluded = getExcludedFolders();
+      panel?.webview?.postMessage({
+        type: 'didUpdateExcludedFolders',
+        payload: excluded,
       });
     }
   });
@@ -70,6 +84,13 @@ function generateGraphData(foam: Foam) {
   foam.workspace.list().forEach(n => {
     const type = n.type === 'note' ? n.properties.type ?? 'note' : n.type;
     const title = n.type === 'note' ? n.title : n.uri.getBasename();
+    // derive folder information (best-effort)
+    let parentFolderName: string | undefined = undefined;
+    try {
+      const folderUri = n.uri.getDirectory();
+      parentFolderName = folderUri.getName() || '/';
+    } catch {}
+
     graph.nodeInfo[n.uri.path] = {
       id: n.uri.path,
       type: type,
@@ -77,7 +98,33 @@ function generateGraphData(foam: Foam) {
       title: cutTitle(title),
       properties: n.properties,
       tags: n.tags,
+      parentFolderName: parentFolderName,
     };
+
+    // Add folder node and edge (note -> folder)
+    try {
+      const folderUri = n.uri.getDirectory();
+      const folderId = folderUri.path;
+      if (folderId && folderId !== n.uri.path) {
+        if (!graph.nodeInfo[folderId]) {
+          const folderTitle = folderUri.getName() || '/';
+          graph.nodeInfo[folderId] = {
+            id: folderId,
+            type: 'folder',
+            uri: folderUri,
+            title: cutTitle(folderTitle),
+            properties: {},
+            folderName: folderTitle,
+          } as any;
+        }
+        graph.edges.add({
+          source: n.uri.path,
+          target: folderId,
+        });
+      }
+    } catch (err) {
+      // be resilient: folder derivation should not break graph rendering
+    }
   });
   foam.graph.getAllConnections().forEach(c => {
     graph.edges.add({
@@ -132,6 +179,14 @@ async function createGraphPanel(foam: Foam, context: vscode.ExtensionContext) {
           panel.webview.postMessage({
             type: 'didUpdateStyle',
             payload: styles,
+          });
+          panel.webview.postMessage({
+            type: 'didUpdateShowFolders',
+            payload: getShowFolders(),
+          });
+          panel.webview.postMessage({
+            type: 'didUpdateExcludedFolders',
+            payload: getExcludedFolders(),
           });
           updateGraph(panel, foam);
           break;
@@ -199,4 +254,16 @@ async function getWebviewContent(
 
 function getGraphStyle(): object {
   return vscode.workspace.getConfiguration('foam.graph').get('style');
+}
+
+function getShowFolders(): boolean {
+  return vscode.workspace
+    .getConfiguration('foam.graph')
+    .get('showFolders', true);
+}
+
+function getExcludedFolders(): string[] {
+  return vscode.workspace
+    .getConfiguration('foam.graph')
+    .get('excludedFolders', [] as string[]);
 }

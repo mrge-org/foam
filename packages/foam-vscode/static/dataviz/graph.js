@@ -5,14 +5,16 @@ const initGUI = () => {
   const nodeTypeFilterFolder = gui.addFolder('Filter by type');
   const nodeTypeFilterControllers = new Map();
 
+  const folderFilterFolder = gui.addFolder('Folders');
+  const folderControllers = new Map(); // key: folder name -> controller
+
   return {
     /**
      * Update the DAT controls to reflect the model
      */
     update: m => {
-      // Update the DAT controls
+      // Update node type controls
       const types = new Set(Object.keys(m.showNodesOfType));
-      // Add new ones
       Array.from(types)
         .sort()
         .forEach(type => {
@@ -29,11 +31,36 @@ const initGUI = () => {
             nodeTypeFilterControllers.set(type, ctrl);
           }
         });
-      // Remove old ones
       for (const type of nodeTypeFilterControllers.keys()) {
         if (!types.has(type)) {
           nodeTypeFilterFolder.remove(nodeTypeFilterControllers.get(type));
           nodeTypeFilterControllers.delete(type);
+        }
+      }
+
+      // Update folder visibility controls
+      const folderNames = new Set(Object.keys(m.showFolderByName || {}));
+      Array.from(folderNames)
+        .sort()
+        .forEach(name => {
+          if (!folderControllers.has(name)) {
+            const ctrl = folderFilterFolder
+              .add(m.showFolderByName, name)
+              .onFinishChange(function () {
+                Actions.updateFilters();
+              });
+            // Change label to desired format: Folder "Name"
+            const labelEl = ctrl.domElement.previousSibling;
+            if (labelEl) {
+              labelEl.textContent = `Folder "${name}"`;
+            }
+            folderControllers.set(name, ctrl);
+          }
+        });
+      for (const name of folderControllers.keys()) {
+        if (!folderNames.has(name)) {
+          folderFilterFolder.remove(folderControllers.get(name));
+          folderControllers.delete(name);
         }
       }
     },
@@ -57,6 +84,7 @@ const defaultStyle = {
     note: getStyle('--vscode-editor-foreground') ?? '#277da1',
     placeholder: getStyle('--vscode-list-deemphasizedForeground') ?? '#545454',
     tag: getStyle('--vscode-list-highlightForeground') ?? '#f9c74f',
+    folder: getStyle('--vscode-textLink-foreground') || '#90be6d',
   },
 };
 
@@ -90,7 +118,12 @@ let model = {
     attachment: false,
     note: true,
     tag: true,
+    folder: true,
   },
+  // Folder name -> boolean (visible)
+  showFolderByName: {},
+  // Track excluded folders coming from settings
+  excludedFolders: new Set(),
 };
 
 const graph = ForceGraph();
@@ -146,6 +179,27 @@ const Actions = {
         }
       });
 
+      // compute folder names present
+      const presentFolders = new Set();
+      Object.values(model.graph.nodeInfo).forEach(node => {
+        if (node.type === 'folder' && node.folderName) {
+          presentFolders.add(node.folderName);
+        }
+      });
+      // remove outdated: keep only folders that are both present AND listed in excludedFolders
+      for (const name of Object.keys(model.showFolderByName)) {
+        if (!presentFolders.has(name) || !model.excludedFolders.has(name)) {
+          delete model.showFolderByName[name];
+        }
+      }
+      // add controls only for excluded folders that are present in the workspace
+      model.excludedFolders.forEach(name => {
+        if (presentFolders.has(name) && model.showFolderByName[name] == null) {
+          // default hidden because they are excluded
+          model.showFolderByName[name] = false;
+        }
+      });
+
       updateForceGraphDataFromModel(m);
     }),
   selectNode: (nodeId, isAppend) =>
@@ -189,6 +243,34 @@ const Actions = {
       updateForceGraphDataFromModel(m);
     });
   },
+  setShowFolders: show =>
+    update(m => {
+      // ensure the flag exists; default is true, override from setting
+      if (m.showNodesOfType.folder !== show) {
+        m.showNodesOfType.folder = show;
+        updateForceGraphDataFromModel(m);
+      }
+    }),
+  setExcludedFolders: list =>
+    update(m => {
+      m.excludedFolders = new Set(Array.isArray(list) ? list : []);
+      // recompute showFolderByName to only track excluded folders that are present
+      const presentFolders = new Set();
+      Object.values(m.graph.nodeInfo || {}).forEach(node => {
+        if (node.type === 'folder' && node.folderName) presentFolders.add(node.folderName);
+      });
+      const next = {};
+      m.excludedFolders.forEach(name => {
+        if (presentFolders.has(name)) {
+          // preserve existing choice if present; otherwise hidden by default
+          next[name] = Object.prototype.hasOwnProperty.call(m.showFolderByName, name)
+            ? m.showFolderByName[name]
+            : false;
+        }
+      });
+      m.showFolderByName = next;
+      updateForceGraphDataFromModel(m);
+    }),
 };
 
 function initDataviz(channel) {
@@ -306,7 +388,19 @@ function updateForceGraphDataFromModel(m) {
   // compute graph delta, for smooth transitions we need to mutate objects in-place
   const nodeIdsToAdd = new Set(
     Object.values(m.graph.nodeInfo ?? {})
-      .filter(n => model.showNodesOfType[n.type])
+      .filter(n => {
+        // Filter by type toggle first
+        if (!model.showNodesOfType[n.type]) return false;
+        // Respect folder visibility
+        if (n.type === 'folder') {
+          const fname = n.folderName;
+          if (fname && model.showFolderByName[fname] === false) return false;
+        }
+        // For non-folder nodes, if parent folder is hidden, exclude
+        const parent = n.parentFolderName;
+        if (parent && model.showFolderByName[parent] === false) return false;
+        return true;
+      })
       .map(n => n.id)
   );
 
@@ -562,6 +656,14 @@ try {
       case 'didUpdateStyle':
         const style = message.payload;
         Actions.updateStyle(style);
+        break;
+      case 'didUpdateShowFolders':
+        const showFolders = message.payload;
+        Actions.setShowFolders(!!showFolders);
+        break;
+      case 'didUpdateExcludedFolders':
+        const excluded = message.payload;
+        Actions.setExcludedFolders(Array.isArray(excluded) ? excluded : []);
         break;
     }
   });

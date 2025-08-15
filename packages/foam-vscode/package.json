@@ -652,6 +652,17 @@
           "type": "object",
           "description": "Custom graph styling settings. An example is present in the documentation.",
           "default": {}
+        },
+        "foam.graph.showFolders": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show folder nodes in the graph view by default."
+        },
+        "foam.graph.excludedFolders": {
+          "type": "array",
+          "default": [],
+          "description": "List of folder names to hide from the graph (both the folder node and notes inside). These folders will appear as toggles in the graph controls to show/hide them.",
+          "items": { "type": "string" }
         }
       }
     },
