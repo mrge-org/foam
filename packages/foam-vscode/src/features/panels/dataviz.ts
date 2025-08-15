@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { Foam } from '../../core/model/foam';
 import { Logger } from '../../core/utils/log';
-import { fromVsCodeUri } from '../../utils/vsc-utils';
+import { fromVsCodeUri, toVsCodeUri } from '../../utils/vsc-utils';
 import { isSome } from '../../core/utils';
 
 export default async function activate(
@@ -80,15 +80,25 @@ function generateGraphData(foam: Foam) {
     nodeInfo: {},
     edges: new Set(),
   };
+  // keep a simple key set to avoid adding duplicate edges
+  const edgeKeys = new Set<string>();
+  const addEdge = (source: string, target: string) => {
+    const key = `${source}->${target}`;
+    if (edgeKeys.has(key)) return;
+    edgeKeys.add(key);
+    graph.edges.add({ source, target });
+  };
 
   foam.workspace.list().forEach(n => {
     const type = n.type === 'note' ? n.properties.type ?? 'note' : n.type;
     const title = n.type === 'note' ? n.title : n.uri.getBasename();
     // derive folder information (best-effort)
     let parentFolderName: string | undefined = undefined;
+    let parentFolderId: string | undefined = undefined;
     try {
       const folderUri = n.uri.getDirectory();
-      parentFolderName = folderUri.getName() || '/';
+      parentFolderName = getFolderNameForDisplay(folderUri);
+      parentFolderId = folderUri.path;
     } catch {}
 
     graph.nodeInfo[n.uri.path] = {
@@ -99,6 +109,7 @@ function generateGraphData(foam: Foam) {
       properties: n.properties,
       tags: n.tags,
       parentFolderName: parentFolderName,
+      parentFolderId: parentFolderId,
     };
 
     // Add folder node and edge (note -> folder)
@@ -107,7 +118,7 @@ function generateGraphData(foam: Foam) {
       const folderId = folderUri.path;
       if (folderId && folderId !== n.uri.path) {
         if (!graph.nodeInfo[folderId]) {
-          const folderTitle = folderUri.getName() || '/';
+          const folderTitle = getFolderNameForDisplay(folderUri);
           graph.nodeInfo[folderId] = {
             id: folderId,
             type: 'folder',
@@ -115,22 +126,45 @@ function generateGraphData(foam: Foam) {
             title: cutTitle(folderTitle),
             properties: {},
             folderName: folderTitle,
+            parentFolderId: undefined as any, // will be set below if parent exists
           } as any;
         }
-        graph.edges.add({
-          source: n.uri.path,
-          target: folderId,
-        });
+        addEdge(n.uri.path, folderId);
+
+        // Build full folder ancestry: link folder -> parent -> ... -> root
+        try {
+          let child = folderUri;
+          while (true) {
+            const parent = child.getDirectory();
+            const childId = child.path;
+            const parentId = parent.path;
+            if (!parentId || parentId === childId) break; // reached root
+
+            if (!graph.nodeInfo[parentId]) {
+              const parentTitle = getFolderNameForDisplay(parent);
+              graph.nodeInfo[parentId] = {
+                id: parentId,
+                type: 'folder',
+                uri: parent,
+                title: cutTitle(parentTitle),
+                properties: {},
+                folderName: parentTitle,
+                parentFolderId: undefined as any,
+              } as any;
+            }
+            addEdge(childId, parentId);
+            // set parent pointer on child folder node
+            (graph.nodeInfo[childId] as any).parentFolderId = parentId;
+            child = parent;
+          }
+        } catch {}
       }
     } catch (err) {
       // be resilient: folder derivation should not break graph rendering
     }
   });
   foam.graph.getAllConnections().forEach(c => {
-    graph.edges.add({
-      source: c.source.path,
-      target: c.target.path,
-    });
+    addEdge(c.source.path, c.target.path);
     if (c.target.isPlaceholder()) {
       graph.nodeInfo[c.target.path] = {
         id: c.target.path,
@@ -192,15 +226,34 @@ async function createGraphPanel(foam: Foam, context: vscode.ExtensionContext) {
           break;
         }
         case 'webviewDidSelectNode': {
-          const noteUri = vscode.Uri.parse(message.payload);
-          const selectedNote = foam.workspace.get(fromVsCodeUri(noteUri));
+          const payload = message.payload;
+          const id: string = typeof payload === 'string' ? payload : payload?.id;
+          const type: string | undefined =
+            typeof payload === 'object' ? payload?.type : undefined;
 
-          if (isSome(selectedNote)) {
-            vscode.commands.executeCommand(
-              'vscode.open',
-              noteUri,
-              vscode.ViewColumn.One
-            );
+          if (!id) {
+            break;
+          }
+
+          const uri = vscode.Uri.parse(id);
+          if (type === 'folder') {
+            // Try to reveal folder in explorer, fallback to opening first file
+            try {
+              await vscode.commands.executeCommand('revealInExplorer', uri);
+            } catch {}
+            try {
+              const entries = await vscode.workspace.fs.readDirectory(uri);
+              const firstFile = entries.find(([name, fileType]) => fileType === vscode.FileType.File);
+              if (firstFile) {
+                const child = vscode.Uri.joinPath(uri, firstFile[0]);
+                await vscode.commands.executeCommand('vscode.open', child, vscode.ViewColumn.One);
+              }
+            } catch {}
+          } else {
+            const selectedNote = foam.workspace.get(fromVsCodeUri(uri));
+            if (isSome(selectedNote)) {
+              vscode.commands.executeCommand('vscode.open', uri, vscode.ViewColumn.One);
+            }
           }
           break;
         }
@@ -266,4 +319,19 @@ function getExcludedFolders(): string[] {
   return vscode.workspace
     .getConfiguration('foam.graph')
     .get('excludedFolders', [] as string[]);
+}
+
+// Prefer repo/workspace folder name instead of '/'
+function getFolderNameForDisplay(folderUri: any): string {
+  try {
+    const wsFolder = vscode.workspace.getWorkspaceFolder(toVsCodeUri(folderUri));
+    const baseName = folderUri.getName();
+    // If this folder is exactly the workspace root, show the workspace name
+    if (wsFolder && folderUri.path === wsFolder.uri.path) {
+      return wsFolder.name || baseName || '/';
+    }
+    return baseName || (wsFolder ? wsFolder.name : '/');
+  } catch {
+    return folderUri?.getName?.() || '/';
+  }
 }

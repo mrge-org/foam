@@ -63,6 +63,13 @@ const initGUI = () => {
           folderControllers.delete(name);
         }
       }
+      // auto open/close the folder section depending on whether there are entries
+      if (folderControllers.size > 0 && !folderFilterFolder._gui) {
+        try { folderFilterFolder.open(); } catch {}
+      }
+      if (folderControllers.size === 0 && folderFilterFolder._ul?.style) {
+        try { folderFilterFolder.close(); } catch {}
+      }
     },
   };
 };
@@ -329,9 +336,10 @@ function initDataviz(channel) {
       Actions.highlightNode(node?.id);
     })
     .onNodeClick((node, event) => {
+      const info = model.graph.nodeInfo[node.id];
       channel.postMessage({
         type: 'webviewDidSelectNode',
-        payload: node.id,
+        payload: { id: node.id, type: info?.type },
       });
       Actions.selectNode(node.id, event.getModifierState('Shift'));
     })
@@ -391,15 +399,8 @@ function updateForceGraphDataFromModel(m) {
       .filter(n => {
         // Filter by type toggle first
         if (!model.showNodesOfType[n.type]) return false;
-        // Respect folder visibility
-        if (n.type === 'folder') {
-          const fname = n.folderName;
-          if (fname && model.showFolderByName[fname] === false) return false;
-        }
-        // For non-folder nodes, if parent folder is hidden, exclude
-        const parent = n.parentFolderName;
-        if (parent && model.showFolderByName[parent] === false) return false;
-        return true;
+        // Respect folder visibility, including folder descendants
+        return isNodeVisibleByFolderToggles(n, model);
       })
       .map(n => n.id)
   );
@@ -444,6 +445,32 @@ function updateForceGraphDataFromModel(m) {
 
   // annoying we need to call this function, but I haven't found a good workaround
   graph.graphData(m.data);
+}
+
+// Determine visibility by checking this node and walking up its folder ancestry.
+function isNodeVisibleByFolderToggles(node, model) {
+  // If no excluded folders are configured, do nothing
+  if (!model || !model.showFolderByName || Object.keys(model.showFolderByName).length === 0) {
+    return true;
+  }
+  // Helper to check a folder node's own toggle
+  const isFolderNameVisible = fname =>
+    fname == null || model.showFolderByName[fname] !== false;
+
+  // Check the node itself (if it's a folder) then walk ancestors by parentFolderId
+  let current = node;
+  while (current) {
+    if (current.type === 'folder') {
+      if (!isFolderNameVisible(current.folderName)) return false;
+    } else {
+      // for non-folder nodes, check immediate parent name first
+      if (!isFolderNameVisible(current.parentFolderName)) return false;
+    }
+    const parentId = current.parentFolderId;
+    if (!parentId) break;
+    current = model.graph.nodeInfo[parentId];
+  }
+  return true;
 }
 
 const getNodeSize = d3
