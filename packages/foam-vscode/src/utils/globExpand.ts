@@ -8,7 +8,7 @@ export function expandAlternateGroups(pattern: string): GlobPattern[] {
   if (!match) {
     return [pattern];
   }
-  const [_, prefix, alternates, suffix] = match;
+  const [, prefix, alternates, suffix] = match;
   return alternates
     .split(',')
     .flatMap(alt => expandAlternateGroups(`${prefix}${alt}${suffix}`));

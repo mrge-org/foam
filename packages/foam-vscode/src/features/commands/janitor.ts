@@ -159,7 +159,7 @@ async function runJanitor(foam: Foam) {
 
     if (heading || definitions) {
       // Apply Edits
-      /* eslint-disable */
+
       await editor.edit(editBuilder => {
         // Note: The ordering matters. Definitions need to be inserted
         // before heading, since inserting a heading changes line numbers below

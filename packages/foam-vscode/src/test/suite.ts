@@ -9,18 +9,15 @@
  *   and so on..
  */
 
-/* eslint-disable import/first */
-
-// Set before imports, see https://github.com/facebook/jest/issues/12162
-process.env.FORCE_COLOR = '1';
-process.env.NODE_ENV = 'test';
-
 import rf from 'rimraf';
-
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { runCLI } from '@jest/core';
 import { cleanWorkspace } from './test-utils-vscode';
 import path from 'path';
+
+// Set before imports, see https://github.com/facebook/jest/issues/12162
+process.env.FORCE_COLOR = '1';
+process.env.NODE_ENV = 'test';
 
 const rootDir = path.join(__dirname, '../..');
 

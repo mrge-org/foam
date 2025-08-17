@@ -25,10 +25,10 @@ export abstract class Location<T> {
     return { uri, range, data };
   }
 
-  static forObjectWithRange<T extends { range: Range }>(
+  static forObjectWithRange<U extends { range: Range }>(
     uri: URI,
-    obj: T
-  ): Location<T> {
-    return Location.create(uri, obj.range, obj);
+    data: U
+  ): Location<U> {
+    return { uri, range: data.range, data };
   }
 }

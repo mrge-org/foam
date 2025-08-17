@@ -47,7 +47,7 @@ export function createFilter(
   filter = filter ?? {};
   const expressionFn =
     enableCode && filter.expression
-      ? resource => eval(filter.expression) // eslint-disable-line no-eval
+      ? resource => eval(filter.expression)
       : undefined;
   return resource => {
     if (expressionFn && !expressionFn(resource)) {

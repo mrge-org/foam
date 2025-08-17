@@ -105,7 +105,6 @@ describe('Daily note creation and template processing', () => {
       const targetDate = new Date(2021, 8, 12); // September 12, 2021
 
       const template = await createFile(
-        // eslint-disable-next-line no-template-curly-in-string
         `# \${FOAM_DATE_YEAR}-\${FOAM_DATE_MONTH}-\${FOAM_DATE_DATE}
 
 Year: \${FOAM_DATE_YEAR} (short: \${FOAM_DATE_YEAR_SHORT})
@@ -138,7 +137,6 @@ Unix: \${FOAM_DATE_SECONDS_UNIX}`,
       const targetDate = new Date(2021, 8, 13);
 
       const template = await createFile(
-        // eslint-disable-next-line no-template-curly-in-string
         '# Daily Note: ${FOAM_TITLE}\n\nToday is ${FOAM_TITLE}.',
         DAILY_NOTE_TEMPLATE
       );
@@ -223,7 +221,6 @@ Unix: \${FOAM_DATE_SECONDS_UNIX}`,
       const targetDate = new Date(2021, 8, 19);
 
       const template = await createFile(
-        // eslint-disable-next-line no-template-curly-in-string
         'hello ${FOAM_DATE_MONTH_NAME} ${FOAM_DATE_DATE} hello',
         DAILY_NOTE_TEMPLATE
       );

@@ -99,7 +99,9 @@ function generateGraphData(foam: Foam) {
       const folderUri = n.uri.getDirectory();
       parentFolderName = getFolderNameForDisplay(folderUri);
       parentFolderId = folderUri.path;
-    } catch {}
+    } catch {
+      // Ignore errors when deriving folder information
+    }
 
     graph.nodeInfo[n.uri.path] = {
       id: n.uri.path,
@@ -134,7 +136,8 @@ function generateGraphData(foam: Foam) {
         // Build full folder ancestry: link folder -> parent -> ... -> root
         try {
           let child = folderUri;
-          while (true) {
+          let maxDepth = 100; // Prevent infinite loops
+          while (maxDepth-- > 0) {
             const parent = child.getDirectory();
             const childId = child.path;
             const parentId = parent.path;
@@ -157,7 +160,9 @@ function generateGraphData(foam: Foam) {
             (graph.nodeInfo[childId] as any).parentFolderId = parentId;
             child = parent;
           }
-        } catch {}
+        } catch {
+          // Ignore errors when building folder ancestry
+        }
       }
     } catch (err) {
       // be resilient: folder derivation should not break graph rendering
@@ -229,7 +234,8 @@ async function createGraphPanel(foam: Foam, context: vscode.ExtensionContext) {
           case 'webviewDidSelectNode': {
             const payload = message.payload;
             const id = typeof payload === 'string' ? payload : payload?.id;
-            const type = typeof payload === 'object' ? payload?.type : undefined;
+            const type =
+              typeof payload === 'object' ? payload?.type : undefined;
             if (!id) return;
             if (type === 'folder') {
               try {
@@ -247,15 +253,36 @@ async function createGraphPanel(foam: Foam, context: vscode.ExtensionContext) {
                     1
                   );
                   if (files.length > 0) {
-                    await vscode.commands.executeCommand('vscode.open', files[0]);
+                    await vscode.commands.executeCommand(
+                      'vscode.open',
+                      files[0],
+                      {
+                        viewColumn: vscode.ViewColumn.One,
+                        preserveFocus: true,
+                        preview: true,
+                      }
+                    );
                   }
-                } catch {}
+                } catch {
+                  // Ignore errors when opening files
+                }
               }
             } else {
               try {
-                await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(id));
+                await vscode.commands.executeCommand(
+                  'vscode.open',
+                  vscode.Uri.parse(id),
+                  {
+                    viewColumn: vscode.ViewColumn.One,
+                    preserveFocus: true,
+                    preview: true,
+                  }
+                );
               } catch (e) {
-                Logger.warn('Could not open resource from graph click', e as any);
+                Logger.warn(
+                  'Could not open resource from graph click',
+                  e as any
+                );
               }
             }
             break;
@@ -266,7 +293,11 @@ async function createGraphPanel(foam: Foam, context: vscode.ExtensionContext) {
               const config = vscode.workspace.getConfiguration('foam.graph');
               const style = (config.get('style') as any) ?? {};
               const next = { ...style, layout };
-              await config.update('style', next, vscode.ConfigurationTarget.Workspace);
+              await config.update(
+                'style',
+                next,
+                vscode.ConfigurationTarget.Workspace
+              );
             }
             break;
           }
@@ -338,7 +369,9 @@ function getExcludedFolders(): string[] {
 // Prefer repo/workspace folder name instead of '/'
 function getFolderNameForDisplay(folderUri: any): string {
   try {
-    const wsFolder = vscode.workspace.getWorkspaceFolder(toVsCodeUri(folderUri));
+    const wsFolder = vscode.workspace.getWorkspaceFolder(
+      toVsCodeUri(folderUri)
+    );
     const baseName = folderUri.getName();
     // If this folder is exactly the workspace root, show the workspace name
     if (wsFolder && folderUri.path === wsFolder.uri.path) {

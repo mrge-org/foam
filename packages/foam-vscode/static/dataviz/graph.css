@@ -2,6 +2,15 @@ body {
   overflow: hidden;
 }
 
+.dg.main {
+  position: fixed !important;
+  top: 8px !important;
+  left: 8px !important;
+  right: auto !important;
+  z-index: 10;
+  max-width: 360px;
+}
+
 .dg .c {
   width: 10%;
 }
@@ -11,64 +20,116 @@ body {
 }
 
 .vscode-light .dg.main.taller-than-window .close-button {
-border-top: 1px solid #ddd;
+  border-top: 1px solid #ddd;
 }
 
 .vscode-light .dg.main .close-button {
-background-color: #ccc;
+  background-color: #ccc;
 }
 
 .vscode-light .dg.main .close-button:hover {
-background-color: #ddd;
+  background-color: #ddd;
 }
 
 .vscode-light .dg {
-color: #555;
-text-shadow: none !important;
+  color: #555;
+  text-shadow: none !important;
 }
 
 .vscode-light .dg.main::-webkit-scrollbar {
-background: #fafafa;
+  background: #fafafa;
 }
 
 .vscode-light .dg.main::-webkit-scrollbar-thumb {
-background: #bbb;
+  background: #bbb;
 }
 
 .vscode-light .dg li:not(.folder) {
-background: #fafafa;
-border-bottom: 1px solid #ddd;
+  background: #fafafa;
+  border-bottom: 1px solid #ddd;
 }
 
 .vscode-light .dg li.save-row .button {
-text-shadow: none !important;
+  text-shadow: none !important;
 }
 
 .vscode-light .dg li.title {
-background: #e8e8e8 url(data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAAXNSR0IArs4c6QAAACVJREFUGFdjZMACGLEKRkfH/0eXAKtElli6dCEjXDtIAiQAUgQAF7UKGmOy49cAAAAASUVORK5CYII=) 6px 10px no-repeat;
+  background: #e8e8e8
+    url(data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAAXNSR0IArs4c6QAAACVJREFUGFdjZMACGLEKRkfH/0eXAKtElli6dCEjXDtIAiQAUgQAF7UKGmOy49cAAAAASUVORK5CYII=)
+    6px 10px no-repeat;
 }
 
-.vscode-light .dg .cr.function:hover,.dg .cr.boolean:hover {
-background: #fff;
+.vscode-light .dg .cr.function:hover,
+.dg .cr.boolean:hover {
+  background: #fff;
 }
 
-.vscode-light .dg .c input[type=text] {
-background: #e9e9e9;
+.vscode-light .dg .c input[type='text'] {
+  background: #e9e9e9;
 }
 
-.vscode-light .dg .c input[type=text]:hover {
-background: #eee;
+.vscode-light .dg .c input[type='text']:hover {
+  background: #eee;
 }
 
-.vscode-light .dg .c input[type=text]:focus {
-background: #eee;
-color: #555;
+.vscode-light .dg .c input[type='text']:focus {
+  background: #eee;
+  color: #555;
 }
 
 .vscode-light .dg .c .slider {
-background: #e9e9e9;
+  background: #e9e9e9;
 }
 
 .vscode-light .dg .c .slider:hover {
-background: #eee;
+  background: #eee;
+}
+
+/* Ensure full-width selects/inputs so labels don't get clipped */
+.dg .c select,
+.dg .c input[type='text'] {
+  width: calc(100% - 6px) !important;
+}
+
+/* Graph on-screen controls for touch users */
+.graph-controls {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  gap: 8px;
+  z-index: 11;
+}
+
+.graph-controls button {
+  padding: 6px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  background: var(--vscode-button-background, #ddd);
+  color: var(--vscode-button-foreground, #000);
+  cursor: pointer;
+}
+
+.graph-controls button:hover {
+  filter: brightness(1.05);
+}
+
+/* Progress indicator */
+.graph-progress {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  z-index: 12;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  pointer-events: none;
+}
+
+.vscode-light .graph-progress {
+  background: rgba(255, 255, 255, 0.9);
+  color: #111;
+  border: 1px solid rgba(0, 0, 0, 0.15);
 }

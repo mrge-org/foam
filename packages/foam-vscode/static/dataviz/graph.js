@@ -12,6 +12,10 @@ const initGUI = () => {
   const layoutFolder = gui.addFolder('Layout');
   let layoutController = null; // singleton controller for layout mode
 
+  // Style controls (readability & theme tweaks)
+  const styleFolder = gui.addFolder('Style');
+  let styleCtrls = null; // create once
+
   return {
     /**
      * Update the DAT controls to reflect the model
@@ -69,10 +73,14 @@ const initGUI = () => {
       }
       // auto open/close the folder section depending on whether there are entries
       if (folderControllers.size > 0 && !folderFilterFolder._gui) {
-        try { folderFilterFolder.open(); } catch {}
+        try {
+          folderFilterFolder.open();
+        } catch {}
       }
       if (folderControllers.size === 0 && folderFilterFolder._ul?.style) {
-        try { folderFilterFolder.close(); } catch {}
+        try {
+          folderFilterFolder.close();
+        } catch {}
       }
 
       // Update layout control (dropdown)
@@ -90,19 +98,86 @@ const initGUI = () => {
             if (window && typeof acquireVsCodeApi === 'function') {
               try {
                 const vscode = acquireVsCodeApi();
-                vscode.postMessage({ type: 'webviewDidChangeLayout', payload: value });
+                vscode.postMessage({
+                  type: 'webviewDidChangeLayout',
+                  payload: value,
+                });
               } catch {}
             }
           });
-        try { layoutFolder.open(); } catch {}
+        try {
+          layoutFolder.open();
+        } catch {}
       } else {
         // keep controller in sync with external changes
         const ctrlObj = layoutController.object;
         if (ctrlObj && ctrlObj.layout !== currentLayout) {
           ctrlObj.layout = currentLayout;
           // dat.gui doesn't auto-refresh displayed value; recreate display
-          try { layoutController.updateDisplay(); } catch {}
+          try {
+            layoutController.updateDisplay();
+          } catch {}
         }
+      }
+
+      // Style controls: create once
+      if (!styleCtrls) {
+        styleCtrls = {};
+        const proxy = {
+          fontSize: m.style.fontSize || 12,
+          lineWidth: m.style.lineWidth || 0.2,
+          particleWidth: m.style.particleWidth || 1.0,
+          performanceMode: !!m.style.performanceMode,
+          highContrast: false,
+        };
+        styleCtrls.fontSize = styleFolder
+          .add(proxy, 'fontSize', 8, 24, 1)
+          .name('Font size')
+          .onFinishChange(v => {
+            Actions.updateStyle({ ...model.style, fontSize: v });
+          });
+        styleCtrls.lineWidth = styleFolder
+          .add(proxy, 'lineWidth', 0.1, 2.0, 0.1)
+          .name('Line width')
+          .onFinishChange(v => {
+            Actions.updateStyle({ ...model.style, lineWidth: v });
+          });
+        styleCtrls.particleWidth = styleFolder
+          .add(proxy, 'particleWidth', 0, 4, 0.1)
+          .name('Particle width')
+          .onFinishChange(v => {
+            Actions.updateStyle({ ...model.style, particleWidth: v });
+          });
+        styleCtrls.performanceMode = styleFolder
+          .add(proxy, 'performanceMode')
+          .name('Limit CPU usage')
+          .onFinishChange(enabled => {
+            Actions.updateStyle({ ...model.style, performanceMode: !!enabled });
+          });
+        styleCtrls.highContrast = styleFolder
+          .add(proxy, 'highContrast')
+          .name('High contrast')
+          .onFinishChange(enabled => {
+            if (enabled) {
+              const isLight = document.body.classList.contains('vscode-light');
+              const hc = {
+                lineWidth: isLight ? 0.7 : 0.5,
+                particleWidth: isLight ? 2.0 : 1.5,
+                highlightedForeground: '#d00000',
+                node: {
+                  ...model.style.node,
+                  note: isLight ? '#1f4e79' : '#277da1',
+                  folder: isLight ? '#2e7d32' : '#90be6d',
+                  placeholder: isLight ? '#888888' : '#545454',
+                  tag: isLight ? '#9c27b0' : '#f9c74f',
+                },
+              };
+              Actions.updateStyle({ ...model.style, ...hc });
+            }
+          });
+        try {
+          styleFolder.open();
+        } catch {}
       }
     },
   };
@@ -119,6 +194,7 @@ const defaultStyle = {
   lineColor: getStyle('--vscode-editor-foreground') ?? '#277da1',
   lineWidth: 0.2,
   particleWidth: 1.0,
+  performanceMode: true,
   highlightedForeground:
     getStyle('--vscode-list-highlightForeground') ?? '#f9c74f',
   node: {
@@ -170,8 +246,26 @@ let model = {
 const graph = ForceGraph();
 const gui = initGUI();
 
+// Progress indicator helpers
+function setProgress(text) {
+  try {
+    const el = window.__foamGraphProgress;
+    if (el) {
+      el.textContent = text || 'Working…';
+      el.style.display = 'block';
+    }
+  } catch {}
+}
+function clearProgress() {
+  try {
+    const el = window.__foamGraphProgress;
+    if (el) el.style.display = 'none';
+  } catch {}
+}
+
 function update(patch) {
   const startTime = performance.now();
+  setProgress('Updating graph…');
   // Apply the patch function to the model..
   patch(model);
   // ..then compute the derived state
@@ -198,6 +292,17 @@ function update(patch) {
 
   gui.update(model);
   console.log(`Updated model in ${performance.now() - startTime}ms`);
+  // Clear progress after engine settles or shortly after
+  try {
+    graph.onEngineStop(() => {
+      graph.onEngineStop(() => {});
+      clearProgress();
+    });
+    // Fallback clear if engine doesn't run
+    setTimeout(clearProgress, 400);
+  } catch {
+    setTimeout(clearProgress, 400);
+  }
 }
 
 const Actions = {
@@ -242,6 +347,10 @@ const Actions = {
       });
 
       updateForceGraphDataFromModel(m);
+      // If folderTree layout is active, re-apply and recenter
+      if ((m.style && m.style.layout) === 'folderTree') {
+        reapplyFolderTreeLayoutAndRecenter();
+      }
     }),
   selectNode: (nodeId, isAppend) =>
     update(m => {
@@ -284,6 +393,9 @@ const Actions = {
   updateFilters: () => {
     update(m => {
       updateForceGraphDataFromModel(m);
+      if ((m.style && m.style.layout) === 'folderTree') {
+        reapplyFolderTreeLayoutAndRecenter();
+      }
     });
   },
   setShowFolders: show =>
@@ -292,6 +404,9 @@ const Actions = {
       if (m.showNodesOfType.folder !== show) {
         m.showNodesOfType.folder = show;
         updateForceGraphDataFromModel(m);
+        if ((m.style && m.style.layout) === 'folderTree') {
+          reapplyFolderTreeLayoutAndRecenter();
+        }
       }
     }),
   setExcludedFolders: list =>
@@ -300,25 +415,70 @@ const Actions = {
       // recompute showFolderByName to only track excluded folders that are present
       const presentFolders = new Set();
       Object.values(m.graph.nodeInfo || {}).forEach(node => {
-        if (node.type === 'folder' && node.folderName) presentFolders.add(node.folderName);
+        if (node.type === 'folder' && node.folderName)
+          presentFolders.add(node.folderName);
       });
       const next = {};
       m.excludedFolders.forEach(name => {
         if (presentFolders.has(name)) {
           // preserve existing choice if present; otherwise hidden by default
-          next[name] = Object.prototype.hasOwnProperty.call(m.showFolderByName, name)
+          next[name] = Object.prototype.hasOwnProperty.call(
+            m.showFolderByName,
+            name
+          )
             ? m.showFolderByName[name]
             : false;
         }
       });
       m.showFolderByName = next;
       updateForceGraphDataFromModel(m);
+      if ((m.style && m.style.layout) === 'folderTree') {
+        reapplyFolderTreeLayoutAndRecenter();
+      }
     }),
 };
 
 function initDataviz(channel) {
   const elem = document.getElementById(CONTAINER_ID);
   const painter = new Painter();
+  // Create touch-friendly on-screen controls
+  try {
+    const controls = document.createElement('div');
+    controls.className = 'graph-controls';
+    const mkBtn = (label, onClick, title) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      if (title) b.title = title;
+      b.onclick = onClick;
+      return b;
+    };
+    controls.appendChild(
+      mkBtn('+', () => graph.zoom(graph.zoom() * 1.2), 'Zoom in')
+    );
+    controls.appendChild(
+      mkBtn('−', () => graph.zoom(graph.zoom() / 1.2), 'Zoom out')
+    );
+    controls.appendChild(
+      mkBtn(
+        'Fit',
+        () => {
+          try {
+            graph.zoomToFit(400);
+          } catch {}
+        },
+        'Zoom to fit'
+      )
+    );
+    document.body.appendChild(controls);
+  } catch {}
+  // Create progress indicator
+  try {
+    const p = document.createElement('div');
+    p.className = 'graph-progress';
+    p.style.display = 'none';
+    document.body.appendChild(p);
+    window.__foamGraphProgress = p;
+  } catch {}
   graph(elem)
     .graphData(model.data)
     .backgroundColor(model.style.background)
@@ -327,7 +487,7 @@ function initDataviz(channel) {
     .d3Force('y', d3.forceY())
     .d3Force('collide', d3.forceCollide(graph.nodeRelSize()))
     .linkWidth(() => model.style.lineWidth)
-    .linkDirectionalParticles(1)
+    .linkDirectionalParticles(() => (model.style.performanceMode ? 0 : 1))
     .linkDirectionalParticleWidth(link =>
       getLinkState(link, model) === 'highlighted'
         ? model.style.particleWidth
@@ -353,9 +513,17 @@ function initDataviz(channel) {
       });
       const label = info.title;
 
-      painter
-        .circle(node.x, node.y, size, fill, border)
-        .text(
+      painter.circle(node.x, node.y, size, fill, border);
+      // In performance mode, always show labels on hover/selection; otherwise use zoom threshold
+      const isEmphasized =
+        nodeState === 'highlighted' || model.selectedNodes.has(node.id);
+      const zoom = graph.zoom ? graph.zoom() : 1;
+      const zoomThreshold = 1.5;
+      const drawLabel =
+        isEmphasized ||
+        (!model.style.performanceMode ? true : zoom >= zoomThreshold);
+      if (drawLabel) {
+        painter.text(
           label,
           node.x,
           node.y + size + 1,
@@ -363,6 +531,7 @@ function initDataviz(channel) {
           model.style.fontFamily,
           textColor
         );
+      }
     })
     .onRenderFramePost(ctx => {
       painter.paint(ctx);
@@ -521,7 +690,12 @@ function applyLayoutFromStyle(model) {
         delete n.fy;
       });
     }
-    graph.cooldownTicks(100);
+    const ticks = model.style?.performanceMode ? 30 : 100;
+    graph.cooldownTicks(ticks);
+    // Reheat the simulation so the engine runs with the new settings
+    try {
+      graph.d3ReheatSimulation();
+    } catch {}
     return;
   }
 
@@ -532,7 +706,9 @@ function applyLayoutFromStyle(model) {
 
   // Build a map id -> { id, children: [] }
   const nodesById = new Map();
-  folderNodes.forEach(n => nodesById.set(n.id, { id: n.id, data: n, children: [] }));
+  folderNodes.forEach(n =>
+    nodesById.set(n.id, { id: n.id, data: n, children: [] })
+  );
   let roots = [];
   nodesById.forEach(node => {
     const parentId = node.data.parentFolderId;
@@ -548,7 +724,10 @@ function applyLayoutFromStyle(model) {
   if (roots.length === 1) {
     root = d3.hierarchy(roots[0], d => d.children);
   } else {
-    root = d3.hierarchy({ id: '__virtual_root__', children: roots }, d => d.children);
+    root = d3.hierarchy(
+      { id: '__virtual_root__', children: roots },
+      d => d.children
+    );
   }
 
   // Layout size based on viewport
@@ -562,8 +741,8 @@ function applyLayoutFromStyle(model) {
   layoutRoot.each(d => {
     if (d.data && d.data.id && d.data.id !== '__virtual_root__') {
       // Map tree (x,y) to screen coordinates (swap for readability)
-      const fx = (width / 2) + d.y; // horizontal spread by depth
-      const fy = (height / 2) + d.x; // vertical position by order
+      const fx = width / 2 + d.y; // horizontal spread by depth
+      const fy = height / 2 + d.x; // vertical position by order
       posById.set(d.data.id, { fx, fy });
     }
   });
@@ -592,12 +771,37 @@ function applyLayoutFromStyle(model) {
   });
 
   // Brief cooldown to settle links while keeping positions
-  graph.cooldownTicks(30);
+  const ticks = model.style?.performanceMode ? 10 : 30;
+  graph.cooldownTicks(ticks);
+  // Reheat the simulation to apply the new pinned positions immediately
+  try {
+    graph.d3ReheatSimulation();
+  } catch {}
+}
+
+// Helper: if in folderTree mode, re-apply layout and recenter/fit viewport
+function reapplyFolderTreeLayoutAndRecenter() {
+  if ((model.style && model.style.layout) !== 'folderTree') return;
+  applyLayoutFromStyle(model);
+  // After the simulation settles, zoom to fit so nodes stay in view
+  try {
+    graph.onEngineStop(() => {
+      // clear the handler immediately to avoid chaining
+      graph.onEngineStop(() => {});
+      try {
+        graph.zoomToFit(400);
+      } catch {}
+    });
+  } catch {}
 }
 // Determine visibility by checking this node and walking up its folder ancestry.
 function isNodeVisibleByFolderToggles(node, model) {
   // If no excluded folders are configured, do nothing
-  if (!model || !model.showFolderByName || Object.keys(model.showFolderByName).length === 0) {
+  if (
+    !model ||
+    !model.showFolderByName ||
+    Object.keys(model.showFolderByName).length === 0
+  ) {
     return true;
   }
   // Helper to check a folder node's own toggle

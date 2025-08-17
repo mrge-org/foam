@@ -33,7 +33,7 @@ It could be interesting to only include a section of a note instead of the entir
 
 `![[wikilink#section-b]]`
 
-As a result it will include the section title + section content until the next section *or* end of file.
+As a result it will include the section title + section content until the next section _or_ end of file.
 
 ### Include an attribute of a file (note property or frontmatter)
 

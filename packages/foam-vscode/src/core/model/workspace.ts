@@ -115,7 +115,7 @@ export class FoamWorkspace implements IDisposable {
     const amongst = [];
     const basename = forResource.getBasename();
 
-    this.listByIdentifier(basename).map(res => {
+    this.listByIdentifier(basename).forEach(res => {
       // skip self
       if (res.uri.isEqual(forResource)) {
         return;

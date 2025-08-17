@@ -138,7 +138,7 @@ export function createVSCodeUri(foamUri: URI): Uri {
 }
 
 // VS Code Uri static methods
-// eslint-disable-next-line @typescript-eslint/no-redeclare
+
 export const Uri = {
   file(path: string): Uri {
     return createVSCodeUri(URI.file(path));

@@ -16,9 +16,7 @@
         "--extensionDevelopmentPath=${workspaceFolder}/packages/foam-vscode",
         "--extensionTestsPath=${workspaceFolder}/packages/foam-vscode/out/test/suite"
       ],
-      "outFiles": [
-        "${workspaceFolder}/packages/foam-vscode/out/**/*.js"
-      ],
+      "outFiles": ["${workspaceFolder}/packages/foam-vscode/out/**/*.js"],
       "preLaunchTask": "${defaultBuildTask}"
     },
     {
@@ -29,9 +27,7 @@
       "args": [
         "--extensionDevelopmentPath=${workspaceFolder}/packages/foam-vscode"
       ],
-      "outFiles": [
-        "${workspaceFolder}/packages/foam-vscode/out/**/*.js"
-      ],
+      "outFiles": ["${workspaceFolder}/packages/foam-vscode/out/**/*.js"],
       "preLaunchTask": "${defaultBuildTask}"
     },
     {
@@ -43,11 +39,7 @@
       "disableOptimisticBPs": true,
       "cwd": "${workspaceFolder}/packages/foam-vscode",
       "runtimeExecutable": "yarn",
-      "args": [
-        "jest",
-        "--runInBand",
-        "--watchAll=false"
-      ]
+      "args": ["jest", "--runInBand", "--watchAll=false"]
     }
   ]
 }

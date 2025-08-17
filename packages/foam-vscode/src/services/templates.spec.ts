@@ -34,7 +34,7 @@ describe('NoteFactory.createNote', () => {
     const target = getUriInWorkspace();
     await NoteFactory.createNote(
       target,
-      'Hello ${FOAM_SELECTED_TEXT} ${FOAM_SELECTED_TEXT}', // eslint-disable-line no-template-curly-in-string
+      'Hello ${FOAM_SELECTED_TEXT} ${FOAM_SELECTED_TEXT}',
       new Resolver(new Map(), new Date()),
       undefined,
       undefined,
@@ -57,7 +57,7 @@ describe('NoteFactory.createNote', () => {
     const target = getUriInWorkspace();
     await NoteFactory.createNote(
       target,
-      'Hello ${FOAM_SELECTED_TEXT} ${FOAM_SELECTED_TEXT}', // eslint-disable-line no-template-curly-in-string
+      'Hello ${FOAM_SELECTED_TEXT} ${FOAM_SELECTED_TEXT}',
       new Resolver(new Map(), new Date()),
       undefined,
       undefined,

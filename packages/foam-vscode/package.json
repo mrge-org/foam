@@ -8,7 +8,7 @@
     "type": "git"
   },
   "homepage": "https://github.com/foambubble/foam",
-  "version": "0.27.2",
+  "version": "0.28.0",
   "license": "MIT",
   "publisher": "foam",
   "engines": {
@@ -685,18 +685,33 @@
               "type": "object",
               "description": "Per-node-type colors.",
               "properties": {
-                "note": { "type": "string" },
-                "placeholder": { "type": "string" },
-                "tag": { "type": "string" },
-                "folder": { "type": "string" },
-                "image": { "type": "string" },
-                "attachment": { "type": "string" }
+                "note": {
+                  "type": "string"
+                },
+                "placeholder": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string"
+                },
+                "folder": {
+                  "type": "string"
+                },
+                "image": {
+                  "type": "string"
+                },
+                "attachment": {
+                  "type": "string"
+                }
               }
             },
             "layout": {
               "type": "string",
               "default": "force",
-              "enum": ["force", "folderTree"],
+              "enum": [
+                "force",
+                "folderTree"
+              ],
               "markdownDescription": "Layout algorithm. 'force' uses a force-directed layout. 'folderTree' computes a tree layout for folders and places notes near their parent folder."
             },
             "forces": {
@@ -733,7 +748,9 @@
           "type": "array",
           "default": [],
           "description": "List of folder names to hide from the graph (both the folder node and notes inside). These folders will appear as toggles in the graph controls to show/hide them.",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       }
     },

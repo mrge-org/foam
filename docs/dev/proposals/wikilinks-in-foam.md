@@ -18,6 +18,7 @@ See below for more details.
 ## Goals for wikilinks in Foam
 
 Wikilinks in Foam are meant to satisfy the following:
+
 - make it easy for users to identify a resource
 - make it interoperable with other similar note taking systems (Obsidian, Dendron, ...)
 - be easy to get started with, but satisfy growing needs
@@ -80,7 +81,7 @@ Basically we could say as a rule:
 
 ## Non-unique identifiers
 
-We can't prevent non-unique identifiers from occurring in Foam (first and foremost because a file could be edited with another editor) but we can flag them. 
+We can't prevent non-unique identifiers from occurring in Foam (first and foremost because a file could be edited with another editor) but we can flag them.
 
 Therefore Foam follows the following strategy instead:
 
@@ -88,6 +89,6 @@ Therefore Foam follows the following strategy instead:
 2. a diagnostic entry (warning or error) is showed to the user for non-unique identifiers, so she knows that she's using a "risky" identifier
    1. The quick resolution for this item will show the available unique identifiers matching the non-unique one
 
-## Thanks 
+## Thanks
 
 Thanks to [@memplex](https://github.com/memeplex) for helping with the thinking around this proposal.
